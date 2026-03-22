@@ -74,6 +74,10 @@ class OrchestratorConfig(BaseSettings):
     )
     max_review_rounds: int = 3
     auto_merge_on_approval: bool = True
+    planning_timeout_seconds: float = Field(
+        validation_alias="SWARM_PLANNING_TIMEOUT_SECONDS",
+        default=900.0,
+    )
 
 
 class WorkerConfig(BaseSettings):

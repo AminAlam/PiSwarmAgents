@@ -82,18 +82,25 @@ class Dispatcher:
         self._merged[tid] = set()
         self._waiting[tid] = []
         repo = self._task_repo.get(tid, task.plan.repo_name if task.plan else "")
+        dispatched = 0
+        failed = 0
         for asg in plan_assignments:
             deps = set(asg.depends_on)
             if deps and not deps <= self._merged[tid]:
                 self._waiting[tid].append(asg)
                 continue
             ok = await self.dispatch_assignment(task, asg, repo)
-            if not ok:
+            if ok:
+                dispatched += 1
+            else:
                 logger.error("Initial dispatch failed for %s", asg.agent_id)
-                try:
-                    await self._metrics.update_task_status(tid, TaskStatus.FAILED)
-                except Exception as exc:
-                    logger.warning("update_task_status: %s", exc)
+                failed += 1
+        if dispatched == 0 and failed > 0:
+            logger.error("All dispatches failed for task %s", tid)
+            try:
+                await self._metrics.update_task_status(tid, TaskStatus.FAILED)
+            except Exception as exc:
+                logger.warning("update_task_status: %s", exc)
 
     async def on_agent_merged(self, task: Task, agent_id: str) -> None:
         """After PR merge, unblock dependents."""

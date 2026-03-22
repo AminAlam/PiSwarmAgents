@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -13,7 +14,7 @@ from src.metrics.collector import MetricsCollector
 from src.models import AgentNode, AgentRole, AssignmentResult, DevAssignment, Task, TaskStatus
 from src.orchestrator.dispatcher import Dispatcher
 from src.orchestrator.merger import try_merge_pr
-from src.orchestrator.planner import build_plan
+from src.orchestrator.planner import build_plan, fallback_single_agent_plan
 from src.orchestrator.reviewer import review_pr
 
 if TYPE_CHECKING:
@@ -58,8 +59,14 @@ async def run_planning_pipeline(
     """Plan task and dispatch work."""
     task = await metrics.get_task(task_id)
     if not task:
+        logger.warning("run_planning_pipeline: task %s not found", task_id)
         return
     try:
+        logger.info(
+            "Planning started task_id=%s title=%r (this may take minutes on first LLM load)",
+            task_id,
+            task.title[:80] if task.title else "",
+        )
         await metrics.update_task_status(task_id, TaskStatus.PLANNING)
         agents = [a for a in await metrics.get_agents() if a.role == AgentRole.DEVELOPER]
         if not agents:
@@ -69,13 +76,39 @@ async def run_planning_pipeline(
         tpl = read_prompt_file(orch.config_path, "lead_planner")
         files = await gitea.list_files(repo_name) if await gitea.repo_exists(repo_name) else []
         await ensure_repo_and_webhook(gitea, repo_name, yaml_cfg.webhook_base_url)
-        plan = await build_plan(task, agents, files, llm, tpl, metrics, repo_name)
+        pick = agents[0].agent_id if agents else "dev-01"
+        timeout = float(orch.planning_timeout_seconds)
+        logger.info(
+            "Calling planner LLM for task_id=%s repo=%s timeout_s=%s agents=%d",
+            task_id,
+            repo_name,
+            timeout,
+            len(agents),
+        )
+        try:
+            plan = await asyncio.wait_for(
+                build_plan(task, agents, files, llm, tpl, metrics, repo_name),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "Planner LLM timed out after %s s for task_id=%s — using fallback single-agent plan",
+                timeout,
+                task_id,
+            )
+            plan = fallback_single_agent_plan(task, repo_name, pick)
+        logger.info(
+            "Planner finished task_id=%s assignments=%d",
+            task_id,
+            len(plan.assignments),
+        )
         task.plan = plan
         task.repo_url = f"{gitea.base_url}/{gitea.organization}/{repo_name}"
         task.status = TaskStatus.IN_PROGRESS
         await metrics.save_task(task)
         dispatcher.set_repo(task_id, plan.repo_name)
         await dispatcher.start_task(task, plan.assignments)
+        logger.info("Dispatch started for task_id=%s", task_id)
     except Exception as exc:
         logger.exception("planning failed: %s", exc)
         await metrics.update_task_status(task_id, TaskStatus.FAILED)

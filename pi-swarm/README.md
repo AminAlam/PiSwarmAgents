@@ -73,6 +73,10 @@ Integration tests: `PI_SWARM_INTEGRATION=1 GITEA_API_BASE_URL=... GITEA_TOKEN=..
 - `src/worker/` — coder, executor, app
 - `src/metrics/` — SQLite + dashboard
 
+## Planning may look “stuck”
+
+After `POST /tasks`, status moves to **planning** until the lead model finishes (first run can **download** a GGUF and **load** into RAM — often **many minutes** on a Pi). Token counts stay **0** until the planner LLM returns. Check `journalctl -u pi-swarm-orchestrator -f` for lines like `Planner LLM call starting` and `Loading LLM from`. Env **`SWARM_PLANNING_TIMEOUT_SECONDS`** (default **900** in code; Ansible sets **1800**) switches to a fallback single-agent plan if the planner runs too long.
+
 ## Scope (MVP)
 
 Syntax validation only for Python; no pytest/ruff in the worker gate. Trusted LAN; no auth between nodes.

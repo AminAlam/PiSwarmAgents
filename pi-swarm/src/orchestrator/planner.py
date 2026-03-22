@@ -142,6 +142,10 @@ async def build_plan(
         schema_json=json.dumps(schema),
     )
     system = "You output only JSON for the development plan."
+    logger.info(
+        "Planner LLM call starting task_id=%s (loading model or inferring — can take several minutes on Pi)",
+        task.task_id,
+    )
     t0 = time.perf_counter()
     data, tin, tout = await __import__("asyncio").to_thread(
         llm.generate_json,
@@ -150,6 +154,13 @@ async def build_plan(
         json.dumps(schema),
     )
     dur = time.perf_counter() - t0
+    logger.info(
+        "Planner LLM returned task_id=%s tokens_in=%s tokens_out=%s duration_s=%.2f",
+        task.task_id,
+        tin,
+        tout,
+        dur,
+    )
     if metrics:
         from src.models import MetricsRecord
 

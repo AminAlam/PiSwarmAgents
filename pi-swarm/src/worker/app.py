@@ -106,14 +106,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Pi Swarm Worker", lifespan=lifespan)
 
 
-@app.post("/assignments", response_model=None)
-async def post_assignment(req: WorkerAssignmentRequest) -> JSONResponse | dict[str, str]:
-    if state.busy:
-        return JSONResponse({"detail": "busy"}, status_code=503)
-    if not state.llm or not state.gitea or not state.worker_cfg:
-        return JSONResponse({"detail": "not initialized"}, status_code=500)
-    state.busy = True
-    state.current_task_id = req.task.task_id
+async def _run_assignment(req: WorkerAssignmentRequest) -> None:
+    """Execute assignment in background; report result to orchestrator."""
     try:
         res = await execute_assignment(
             req.assignment,
@@ -127,18 +121,26 @@ async def post_assignment(req: WorkerAssignmentRequest) -> JSONResponse | dict[s
         report_url = f"{state.worker_cfg.orchestrator_url.rstrip('/')}/agents/{state.worker_cfg.agent_id}/result"
         if state.orchestrator_http:
             try:
-                await state.orchestrator_http.post(report_url, json=res.model_dump())
+                await state.orchestrator_http.post(report_url, json=res.model_dump(mode="json"))
             except Exception as exc:
                 logger.exception("report result failed: %s", exc)
-        if res.success:
-            return {"status": "ok"}
-        return JSONResponse({"status": "done_with_errors", "error": res.error_message})
     except Exception as exc:
         logger.exception("assignment failed: %s", exc)
-        return JSONResponse({"status": "error", "detail": str(exc)})
     finally:
         state.busy = False
         state.current_task_id = None
+
+
+@app.post("/assignments", response_model=None)
+async def post_assignment(req: WorkerAssignmentRequest) -> JSONResponse | dict[str, str]:
+    if state.busy:
+        return JSONResponse({"detail": "busy"}, status_code=503)
+    if not state.llm or not state.gitea or not state.worker_cfg:
+        return JSONResponse({"detail": "not initialized"}, status_code=500)
+    state.busy = True
+    state.current_task_id = req.task.task_id
+    asyncio.create_task(_run_assignment(req))
+    return {"status": "accepted"}
 
 
 @app.get("/status")
@@ -152,7 +154,10 @@ async def get_status() -> dict[str, Any]:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "agent_id": state.worker_cfg.agent_id if state.worker_cfg else ""}
+    return {
+        "status": "busy" if state.busy else "ok",
+        "agent_id": state.worker_cfg.agent_id if state.worker_cfg else "",
+    }
 
 
 @app.post("/cancel")

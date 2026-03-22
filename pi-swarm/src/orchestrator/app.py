@@ -8,7 +8,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
 from src.config import (
@@ -88,10 +88,15 @@ async def lifespan(app: FastAPI):
                         url = f"http://{a.host}:{a.port}/health"
                         try:
                             r = await client.get(url)
-                            st = "idle" if r.status_code == 200 else "offline"
+                            if r.status_code != 200:
+                                await metrics.update_agent_status(a.agent_id, "offline")
+                            else:
+                                data = r.json()
+                                reported = data.get("status", "ok")
+                                st = "busy" if reported == "busy" else "idle"
+                                await metrics.update_agent_status(a.agent_id, st)
                         except Exception:
-                            st = "offline"
-                        await metrics.update_agent_status(a.agent_id, st)
+                            await metrics.update_agent_status(a.agent_id, "offline")
             except Exception as exc:
                 logger.warning("health_loop: %s", exc)
 
@@ -107,8 +112,29 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Pi Swarm Orchestrator", lifespan=lifespan)
 
 
+def _schedule_planning(task_id: str, application: FastAPI) -> None:
+    """Run planning in the event loop so errors are logged (BackgroundTasks can hide failures)."""
+    st = application.state
+
+    async def _run() -> None:
+        try:
+            await run_planning_pipeline(
+                task_id,
+                st.metrics,
+                st.gitea,
+                st.llm,
+                st.orch_cfg,
+                st.yaml_cfg,
+                st.dispatcher,
+            )
+        except Exception:
+            logger.exception("Unhandled error in planning task_id=%s", task_id)
+
+    asyncio.create_task(_run())
+
+
 @app.post("/tasks")
-async def post_task(req: TaskSubmitRequest, bg: BackgroundTasks, request: Request) -> dict[str, str]:
+async def post_task(req: TaskSubmitRequest, request: Request) -> dict[str, str]:
     metrics: MetricsCollector = request.app.state.metrics
     tid = uuid.uuid4().hex[:12]
     task = Task(
@@ -121,16 +147,7 @@ async def post_task(req: TaskSubmitRequest, bg: BackgroundTasks, request: Reques
         status=TaskStatus.PENDING,
     )
     await metrics.save_task(task)
-    bg.add_task(
-        run_planning_pipeline,
-        tid,
-        metrics,
-        request.app.state.gitea,
-        request.app.state.llm,
-        request.app.state.orch_cfg,
-        request.app.state.yaml_cfg,
-        request.app.state.dispatcher,
-    )
+    _schedule_planning(tid, request.app)
     return {"task_id": tid}
 
 
@@ -147,17 +164,8 @@ async def get_task(task_id: str, request: Request) -> dict[str, Any] | None:
 
 
 @app.post("/tasks/{task_id}/plan")
-async def replan_task(task_id: str, bg: BackgroundTasks, request: Request) -> dict[str, str]:
-    bg.add_task(
-        run_planning_pipeline,
-        task_id,
-        request.app.state.metrics,
-        request.app.state.gitea,
-        request.app.state.llm,
-        request.app.state.orch_cfg,
-        request.app.state.yaml_cfg,
-        request.app.state.dispatcher,
-    )
+async def replan_task(task_id: str, request: Request) -> dict[str, str]:
+    _schedule_planning(task_id, request.app)
     return {"status": "scheduled"}
 
 

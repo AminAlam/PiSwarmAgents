@@ -87,7 +87,10 @@ class SwarmLLM:
 
                 path = resolve_model_path(self._hf_model)
                 self._model_path = path
-                logger.info("Loading LLM from %s", path)
+                logger.info(
+                    "Loading LLM from %s (first load may take minutes; downloads may use HF Hub)",
+                    path,
+                )
                 self._model = Llama(
                     model_path=path,
                     n_ctx=self._n_ctx,
@@ -144,9 +147,9 @@ class SwarmLLM:
         """Generate JSON; retry on parse failure."""
         total_in = 0
         total_out = 0
-        extra = f"\n\nRespond with ONLY valid JSON: {schema_description}"
+        extra = f"\n\nRespond with ONLY valid JSON matching this schema: {schema_description}"
         for attempt in range(retries):
-            up = user_prompt + (extra if attempt else "")
+            up = user_prompt + extra
             text, pin, cout = self.generate(
                 system_prompt,
                 up,
