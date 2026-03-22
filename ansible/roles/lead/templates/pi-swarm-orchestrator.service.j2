@@ -9,7 +9,8 @@ EnvironmentFile=/etc/pi-swarm/gitea.env
 Environment=GITEA_API_BASE_URL={{ gitea_api_base_url }}
 Environment=SWARM_METRICS_DB=/var/lib/pi-swarm/metrics.db
 Environment=SWARM_CONFIG_PATH={{ pi_swarm_app_dir }}/config/swarm_config.yaml
-ExecStart=/usr/bin/python3 -m uvicorn src.orchestrator.app:app --host 0.0.0.0 --port 8080
+Environment=SWARM_PLANNING_TIMEOUT_SECONDS={{ swarm_planning_timeout_seconds | default(1800) }}
+ExecStart=/usr/bin/python3 -m uvicorn src.orchestrator.app:app --host 0.0.0.0 --port 8080 --log-level info
 Restart=always
 MemoryMax=512M
 
