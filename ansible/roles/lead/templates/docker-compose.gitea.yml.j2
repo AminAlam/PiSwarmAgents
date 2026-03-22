@@ -1,0 +1,22 @@
+# Managed by Ansible — Pi Swarm Gitea
+services:
+  server:
+    image: {{ gitea_image }}
+    container_name: {{ gitea_container_name }}
+    environment:
+      - USER_UID={{ gitea_user_uid }}
+      - USER_GID={{ gitea_user_gid }}
+    restart: always
+    networks:
+      - gitea
+    volumes:
+      - {{ gitea_data_host_path }}:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "0.0.0.0:{{ gitea_publish_http }}:3000"
+      - "0.0.0.0:{{ gitea_publish_ssh }}:22"
+
+networks:
+  gitea:
+    driver: bridge

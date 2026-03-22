@@ -1,0 +1,56 @@
+---
+# Pi Swarm — single Ansible inventory + variables file.
+#
+#   cp config.yml.example config.yml
+#
+# Edit config.yml (gitignored). Then: cd ansible && ansible-playbook playbook.yaml
+
+all:
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+    # --- App / model (common role) — passed to llama-cli as: llama-cli -hf <hf_model> ---
+    hf_model: "Qwen/Qwen3-4B-GGUF"
+    swarm_repo: "https://github.com/AminAlam/PiSwarmAgents.git"
+
+    # Workers call this URL (lead host LAN IP + orchestrator port).
+    orchestrator_url: "http://192.168.0.171:8080"
+
+    # --- Gitea API token (POST /api/v1/users/:name/tokens, BasicAuth) ---
+    gitea_api_base_url: "http://127.0.0.1:3000"
+    # [server] DOMAIN / ROOT_URL — set domain to LAN IP if workers use it; optional gitea_root_url
+    gitea_server_domain: "127.0.0.1"
+    gitea_admin_email: "swarm-admin@local"
+    gitea_user: "swarm-admin"
+    gitea_password: "CHANGE_ME"
+    gitea_token_name: "ansible-pi-swarm"
+    gitea_validate_certs: true
+
+    # --- Gitea Docker (lead role) — Docker Engine installed per Docker Pi OS docs (see gitea_docker.yml) ---
+    # gitea_purge_data: true   # one-shot: wipe /opt/gitea/gitea data + token env for a clean Gitea reinstall
+    # gitea_open_firewall: false  # set false if you manage firewall yourself; when true, UFW allows gitea_publish_http
+    gitea_compose_dir: "/opt/gitea"
+    gitea_data_host_path: "/opt/gitea/gitea"
+    gitea_image: "docker.gitea.com/gitea:1.25.5"
+    gitea_container_name: "gitea"
+    gitea_user_uid: "1000"
+    gitea_user_gid: "1000"
+    gitea_publish_http: "3000"
+    gitea_publish_ssh: "222"
+
+  children:
+    lead:
+      hosts:
+        pi-lead:
+          ansible_host: 192.168.0.171
+          ansible_user: amin
+    workers:
+      hosts:
+        pi-dev-01:
+          ansible_host: 192.168.0.193
+          ansible_user: amin
+          worker_agent_id: dev-01
+        pi-dev-02:
+          ansible_host: 192.168.0.69
+          ansible_user: amin
+          worker_agent_id: dev-02

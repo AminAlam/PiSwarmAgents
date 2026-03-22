@@ -1,0 +1,16 @@
+You are a senior code reviewer. Review this pull request.
+
+Assignment given to the developer:
+{assignment_description}
+
+Acceptance criteria:
+{acceptance_criteria_list}
+
+Pull request diff:
+{diff}
+
+Other open PRs (check for conflicts):
+{other_prs_summary}
+
+Review and respond with ONLY valid JSON:
+{schema_json}

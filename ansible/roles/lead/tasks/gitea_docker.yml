@@ -1,0 +1,237 @@
+---
+# Docker Engine — Debian bookworm apt repo (works on Pi OS when raspbian suite has no packages).
+
+# Per Docker docs — only distro packages conflict with docker-ce from Docker's repo.
+- name: Remove conflicting distro Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-doc
+      - docker-compose
+      - podman-docker
+      - docker-buildx
+    state: absent
+
+# --- Docker Inc. install sequence (verbatim) ---
+
+- name: apt-get update
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: apt-get install ca-certificates curl
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+    state: present
+
+- name: install -m 0755 -d /etc/apt/keyrings
+  ansible.builtin.command: install -m 0755 -d /etc/apt/keyrings
+  changed_when: false
+
+- name: curl Docker GPG key to /etc/apt/keyrings/docker.asc
+  ansible.builtin.command:
+    argv:
+      - curl
+      - -fsSL
+      - https://download.docker.com/linux/debian/gpg
+      - -o
+      - /etc/apt/keyrings/docker.asc
+
+- name: chmod a+r /etc/apt/keyrings/docker.asc
+  ansible.builtin.command: chmod a+r /etc/apt/keyrings/docker.asc
+  changed_when: false
+
+- name: Remove existing /etc/apt/sources.list.d/docker.list
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/docker.list
+    state: absent
+
+- name: Add Docker Debian bookworm apt repository
+  ansible.builtin.shell: |
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  args:
+    executable: /bin/bash
+
+- name: apt-get update (after docker.list)
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Enable and start Docker
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Allow Gitea HTTP port through UFW (LAN access from other PCs)
+  ansible.builtin.shell: |
+    if ! command -v ufw >/dev/null 2>&1; then exit 0; fi
+    if ! ufw status 2>/dev/null | grep -q "Status: active"; then exit 0; fi
+    ufw allow {{ gitea_publish_http }}/tcp comment 'Gitea HTTP' || true
+  args:
+    executable: /bin/bash
+  when: gitea_open_firewall | default(true) | bool
+  register: gitea_ufw
+  changed_when: "'added' in gitea_ufw.stdout | default('', true) | lower"
+  failed_when: false
+
+- name: Check for existing Gitea docker-compose.yml
+  ansible.builtin.stat:
+    path: "{{ gitea_compose_dir }}/docker-compose.yml"
+  register: gitea_compose_yml_stat
+
+- name: Stop and remove existing Gitea stack
+  ansible.builtin.command: docker compose down --remove-orphans
+  args:
+    chdir: "{{ gitea_compose_dir }}"
+  when: gitea_compose_yml_stat.stat.exists
+  register: gitea_compose_down
+  changed_when: gitea_compose_down.rc == 0
+  failed_when: false
+
+- name: Remove Gitea container if it still exists
+  ansible.builtin.command: docker rm -f {{ gitea_container_name }}
+  register: gitea_rm_container
+  changed_when: gitea_rm_container.rc == 0
+  failed_when: false
+
+- name: Remove Gitea host data directory (destructive reinstall)
+  ansible.builtin.file:
+    path: "{{ gitea_data_host_path }}"
+    state: absent
+  when: gitea_purge_data | default(false) | bool
+
+- name: Remove cached Gitea token env after data purge
+  ansible.builtin.file:
+    path: /etc/pi-swarm/gitea.env
+    state: absent
+  when: gitea_purge_data | default(false) | bool
+
+- name: Create Gitea compose and data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ gitea_compose_dir }}"
+    - "{{ gitea_data_host_path }}"
+    - "{{ gitea_data_host_path }}/gitea/conf"
+
+- name: Check for existing Gitea app.ini
+  ansible.builtin.stat:
+    path: "{{ gitea_data_host_path }}/gitea/conf/app.ini"
+  register: gitea_app_ini_stat
+
+- name: Pull Gitea image (needed for secret generation and compose)
+  ansible.builtin.command: docker pull {{ gitea_image }}
+  register: gitea_pull
+  changed_when: false
+  failed_when: gitea_pull.rc != 0
+
+- name: Generate Gitea SECRET_KEY
+  ansible.builtin.command: docker run --rm {{ gitea_image }} gitea generate secret SECRET_KEY
+  register: gitea_secret_key
+  changed_when: true
+  when: not gitea_app_ini_stat.stat.exists
+
+- name: Generate Gitea INTERNAL_TOKEN
+  ansible.builtin.command: docker run --rm {{ gitea_image }} gitea generate secret INTERNAL_TOKEN
+  register: gitea_internal_token
+  changed_when: true
+  when: not gitea_app_ini_stat.stat.exists
+
+- name: Deploy Gitea app.ini (no web installer)
+  ansible.builtin.template:
+    src: gitea-app.ini.j2
+    dest: "{{ gitea_data_host_path }}/gitea/conf/app.ini"
+    mode: "0644"
+  when: not gitea_app_ini_stat.stat.exists
+
+- name: Turn off built-in SSH in app.ini if still true (Docker image OpenSSH owns :22)
+  ansible.builtin.replace:
+    path: "{{ gitea_data_host_path }}/gitea/conf/app.ini"
+    regexp: '^START_SSH_SERVER\s*=\s*true\s*$'
+    replace: 'START_SSH_SERVER = false'
+  register: gitea_fix_builtin_ssh
+
+- name: Deploy Gitea docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.gitea.yml.j2
+    dest: "{{ gitea_compose_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Bring up Gitea (docker compose)
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ gitea_compose_dir }}"
+  register: gitea_compose_up
+  changed_when: gitea_compose_up.rc == 0
+  failed_when: gitea_compose_up.rc != 0
+
+- name: Restart Gitea after built-in SSH fix (reload app.ini)
+  ansible.builtin.command: docker compose restart {{ gitea_container_name }}
+  args:
+    chdir: "{{ gitea_compose_dir }}"
+  when: gitea_fix_builtin_ssh.changed | default(false)
+  failed_when: false
+
+- name: Wait for Gitea to listen on HTTP
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: "{{ gitea_publish_http | int }}"
+    delay: 3
+    timeout: 300
+
+- name: Wait until Gitea admin CLI is ready
+  ansible.builtin.command: docker exec -u git {{ gitea_container_name }} gitea admin user list
+  register: gitea_user_list_precheck
+  until: gitea_user_list_precheck.rc == 0
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Create Gitea admin user (CLI; skips registration UI)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -u
+      - git
+      - "{{ gitea_container_name }}"
+      - gitea
+      - admin
+      - user
+      - create
+      - --admin
+      - --username
+      - "{{ gitea_user }}"
+      - --password
+      - "{{ gitea_password }}"
+      - --email
+      - "{{ gitea_admin_email }}"
+      - --must-change-password=false
+  register: gitea_admin_create
+  when: gitea_user not in (gitea_user_list_precheck.stdout | default(''))
+  changed_when: gitea_admin_create.rc == 0
+
+# Loopback only (never gitea_api_base_url/LAN IP — hairpin often fails). Uses curl; Python uri can still use wrong URL or mangle IPv4.
+- name: Wait until Gitea serves HTTP on localhost
+  ansible.builtin.shell: >-
+    curl -sfS --connect-timeout 5 --max-time 15
+    "http://127.0.0.1:{{ gitea_publish_http | int }}/"
+    -o /dev/null
+  register: gitea_http_curl
+  until: gitea_http_curl.rc == 0
+  retries: 40
+  delay: 5
+  changed_when: false

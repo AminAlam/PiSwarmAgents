@@ -1,0 +1,20 @@
+[Unit]
+Description=Pi Swarm Worker
+After=network.target
+
+[Service]
+User=swarm
+WorkingDirectory=/opt/pi-swarm/app
+EnvironmentFile=/etc/pi-swarm/gitea.env
+Environment=GITEA_API_BASE_URL={{ gitea_api_base_url }}
+Environment=ORCHESTRATOR_URL={{ orchestrator_url }}
+Environment=SWARM_CONFIG_PATH=/opt/pi-swarm/app/config/swarm_config.yaml
+Environment=AGENT_ID={{ worker_agent_id | default(inventory_hostname) }}
+Environment=HF_MODEL={{ hf_model }}
+Environment=WORKER_ADVERTISE_HOST={{ ansible_host }}
+ExecStart=/usr/bin/python3 -m uvicorn src.worker.app:app --host 0.0.0.0 --port 8000
+Restart=always
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

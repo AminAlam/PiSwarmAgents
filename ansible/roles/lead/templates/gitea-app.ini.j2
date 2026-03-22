@@ -1,0 +1,45 @@
+{# ROOT_URL must match how clients reach Gitea (see gitea_api_base_url / gitea_root_url). #}
+{% set _root = (gitea_root_url | default(gitea_api_base_url)).rstrip('/') ~ '/' %}
+# Managed by Ansible — skips web installer (INSTALL_LOCK=true). Do not edit by hand on cluster nodes.
+
+APP_NAME = Pi Swarm Gitea
+RUN_USER = git
+RUN_MODE = prod
+
+[repository]
+ROOT = /data/git/repositories
+
+[repository.local]
+LOCAL_COPY_PATH = /data/tmp/local-repo
+
+[server]
+DOMAIN = {{ gitea_server_domain }}
+HTTP_ADDR = 0.0.0.0
+HTTP_PORT = 3000
+ROOT_URL = {{ _root }}
+APP_DATA_PATH = /data/gitea
+SSH_DOMAIN = {{ gitea_server_domain }}
+SSH_PORT = 22
+{# Official Gitea image runs OpenSSH on :22; built-in SSH must stay off or Gitea exits with "address already in use". #}
+START_SSH_SERVER = false
+DISABLE_SSH = false
+
+[database]
+DB_TYPE = sqlite3
+PATH = /data/gitea/gitea.db
+LOG_SQL = false
+
+[session]
+PROVIDER = file
+PROVIDER_CONFIG = /data/gitea/sessions
+
+[security]
+INSTALL_LOCK = true
+SECRET_KEY = "{{ gitea_secret_key.stdout | trim }}"
+INTERNAL_TOKEN = "{{ gitea_internal_token.stdout | trim }}"
+
+[service]
+DISABLE_REGISTRATION = true
+
+[mailer]
+ENABLED = false

@@ -1,0 +1,29 @@
+---
+- name: Ensure /etc/pi-swarm exists
+  ansible.builtin.file:
+    path: /etc/pi-swarm
+    state: directory
+    mode: "0755"
+
+- name: Copy Gitea token env from lead hostvars
+  ansible.builtin.copy:
+    dest: /etc/pi-swarm/gitea.env
+    content: |
+      GITEA_TOKEN={{ hostvars[groups['lead'][0]]['pi_swarm_gitea_token'] }}
+    mode: "0600"
+    owner: root
+    group: root
+
+- name: Worker systemd unit
+  ansible.builtin.template:
+    src: pi-swarm-worker.service.j2
+    dest: /etc/systemd/system/pi-swarm-worker.service
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Enable and start worker
+  ansible.builtin.systemd:
+    name: pi-swarm-worker
+    enabled: true
+    state: started
+    daemon_reload: true

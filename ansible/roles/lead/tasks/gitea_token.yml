@@ -1,0 +1,77 @@
+---
+# Create or reuse GITEA_TOKEN via POST /api/v1/users/:name/tokens (BasicAuth).
+# Ref: https://docs.gitea.com/development/api-usage
+
+- name: Ensure /etc/pi-swarm exists for env file
+  ansible.builtin.file:
+    path: /etc/pi-swarm
+    state: directory
+    mode: "0755"
+
+- name: Check existing gitea.env
+  ansible.builtin.stat:
+    path: /etc/pi-swarm/gitea.env
+  register: gitea_env_stat
+
+- name: Read GITEA_TOKEN from existing env file
+  when: gitea_env_stat.stat.exists
+  ansible.builtin.shell: "grep '^GITEA_TOKEN=' /etc/pi-swarm/gitea.env | cut -d= -f2-"
+  register: gitea_token_grep
+  changed_when: false
+  failed_when: false
+
+- name: Set pi_swarm_gitea_token from file
+  when: gitea_env_stat.stat.exists
+  ansible.builtin.set_fact:
+    pi_swarm_gitea_token: "{{ gitea_token_grep.stdout | trim }}"
+
+- name: Assert credentials for new token
+  when: not gitea_env_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - gitea_user | length > 0
+      - gitea_password | length > 0
+    fail_msg: >-
+      Copy ansible/secrets.yml.example to ansible/group_vars/all/secrets.yml and set gitea_user / gitea_password,
+      or pre-create /etc/pi-swarm/gitea.env on the lead node.
+
+- name: Create API token via Gitea API
+  when: not gitea_env_stat.stat.exists
+  ansible.builtin.uri:
+    url: "{{ ('http://127.0.0.1:' ~ (gitea_publish_http | string)).rstrip('/') }}/api/v1/users/{{ gitea_user }}/tokens"
+    method: POST
+    body_format: json
+    body:
+      name: "{{ gitea_token_name }}"
+      scopes: ["all"]
+    user: "{{ gitea_user }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    status_code: [200, 201]
+    validate_certs: "{{ gitea_validate_certs | default(true) }}"
+  register: gitea_token_response
+  retries: 5
+  delay: 5
+  until: gitea_token_response is succeeded
+
+- name: Extract token string from API response
+  when: not gitea_env_stat.stat.exists
+  ansible.builtin.set_fact:
+    pi_swarm_gitea_token: "{{ gitea_token_response.json.sha1 | default(gitea_token_response.json.token) }}"
+
+- name: Write /etc/pi-swarm/gitea.env
+  when: not gitea_env_stat.stat.exists
+  ansible.builtin.copy:
+    dest: /etc/pi-swarm/gitea.env
+    content: |
+      GITEA_TOKEN={{ pi_swarm_gitea_token }}
+    mode: "0600"
+    owner: root
+    group: root
+
+- name: Ensure pi_swarm_gitea_token is set
+  ansible.builtin.assert:
+    that:
+      - pi_swarm_gitea_token is defined
+      - pi_swarm_gitea_token | length > 0
+    fail_msg: GITEA_TOKEN could not be determined. Check Gitea is running and credentials in secrets.yml.

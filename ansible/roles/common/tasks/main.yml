@@ -1,0 +1,61 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install system packages
+  ansible.builtin.apt:
+    name:
+      - python3-pip
+      - python3-venv
+      - git
+      - build-essential
+      - cmake
+    state: present
+
+- name: Create swarm user
+  ansible.builtin.user:
+    name: swarm
+    home: /opt/pi-swarm
+    shell: /bin/bash
+    create_home: true
+
+- name: Clone pi-swarm app
+  ansible.builtin.git:
+    repo: "{{ swarm_repo }}"
+    dest: /opt/pi-swarm/app
+    version: main
+  ignore_errors: true
+
+- name: Install Python requirements
+  ansible.builtin.pip:
+    requirements: /opt/pi-swarm/app/requirements.txt
+    executable: pip3
+    extra_args: --break-system-packages
+  ignore_errors: true
+
+- name: Install llama-cpp-python
+  ansible.builtin.pip:
+    name: llama-cpp-python
+    executable: pip3
+    extra_args: --break-system-packages
+  ignore_errors: true
+
+- name: Configure swap 2GB (dphys-swapfile)
+  ansible.builtin.shell: |
+    set -e
+    if command -v dphys-swapfile >/dev/null 2>&1; then
+      dphys-swapfile swapoff || true
+      echo "CONF_SWAPSIZE=2048" > /etc/dphys-swapfile
+      dphys-swapfile setup || true
+      dphys-swapfile swapon || true
+    fi
+  args:
+    executable: /bin/bash
+  ignore_errors: true
+
+- name: CPU governor performance
+  ansible.builtin.shell: |
+    echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+  ignore_errors: true

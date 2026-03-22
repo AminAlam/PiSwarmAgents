@@ -1,0 +1,15 @@
+---
+# Set true to delete Gitea bind-mount data and app.ini for a clean reinstall (also clears /etc/pi-swarm/gitea.env on lead).
+gitea_purge_data: false
+
+# Open TCP gitea_publish_http in UFW when UFW is active (so other PCs can reach Gitea on the LAN).
+gitea_open_firewall: true
+
+# [server] DOMAIN / SSH_DOMAIN — match the host clients use (or LAN IP).
+gitea_server_domain: "127.0.0.1"
+
+# Admin user for CLI + API (gitea_user / gitea_password come from inventory).
+gitea_admin_email: "swarm-admin@local"
+
+# Optional; if unset, ROOT_URL is derived from gitea_api_base_url in gitea-app.ini.j2
+# gitea_root_url: "http://127.0.0.1:3000"

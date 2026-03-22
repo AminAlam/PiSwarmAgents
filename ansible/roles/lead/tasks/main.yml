@@ -1,0 +1,27 @@
+---
+- name: Gitea (Docker Compose)
+  ansible.builtin.import_tasks: gitea_docker.yml
+
+- name: Gitea API token and /etc/pi-swarm/gitea.env
+  ansible.builtin.import_tasks: gitea_token.yml
+
+- name: Metrics directory
+  ansible.builtin.file:
+    path: /var/lib/pi-swarm
+    state: directory
+    owner: swarm
+    mode: "0755"
+
+- name: Orchestrator systemd unit
+  ansible.builtin.template:
+    src: pi-swarm-orchestrator.service.j2
+    dest: /etc/systemd/system/pi-swarm-orchestrator.service
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Enable and start orchestrator
+  ansible.builtin.systemd:
+    name: pi-swarm-orchestrator
+    enabled: true
+    state: started
+    daemon_reload: true
