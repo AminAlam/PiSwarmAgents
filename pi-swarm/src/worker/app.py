@@ -105,6 +105,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Pi Swarm Worker", lifespan=lifespan)
 
+# Must hold strong references to background tasks or GC may destroy them mid-execution.
+_background_tasks: set[asyncio.Task[None]] = set()
+
 
 async def _run_assignment(req: WorkerAssignmentRequest) -> None:
     """Execute assignment in background; report result to orchestrator."""
@@ -139,7 +142,9 @@ async def post_assignment(req: WorkerAssignmentRequest) -> JSONResponse | dict[s
         return JSONResponse({"detail": "not initialized"}, status_code=500)
     state.busy = True
     state.current_task_id = req.task.task_id
-    asyncio.create_task(_run_assignment(req))
+    task = asyncio.create_task(_run_assignment(req))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     return {"status": "accepted"}
 
 

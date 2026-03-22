@@ -111,6 +111,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Pi Swarm Orchestrator", lifespan=lifespan)
 
+# Must hold strong references to background tasks or GC may destroy them mid-execution.
+_background_tasks: set[asyncio.Task[None]] = set()
+
 
 def _schedule_planning(task_id: str, application: FastAPI) -> None:
     """Run planning in the event loop so errors are logged (BackgroundTasks can hide failures)."""
@@ -130,7 +133,9 @@ def _schedule_planning(task_id: str, application: FastAPI) -> None:
         except Exception:
             logger.exception("Unhandled error in planning task_id=%s", task_id)
 
-    asyncio.create_task(_run())
+    task = asyncio.create_task(_run())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 @app.post("/tasks")
