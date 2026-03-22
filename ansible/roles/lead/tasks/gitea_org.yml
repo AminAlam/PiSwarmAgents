@@ -1,0 +1,41 @@
+---
+# Ensure the Gitea organization used by Pi Swarm (default: swarm) exists.
+# POST /api/v1/orgs — https://docs.gitea.com/api/1.20/#tag/organization/operation/orgCreate
+
+- name: Check if Gitea organization exists
+  ansible.builtin.uri:
+    url: "{{ (gitea_api_base_url | trim).rstrip('/') }}/api/v1/orgs/{{ gitea_swarm_org | default('swarm') | trim }}"
+    method: GET
+    headers:
+      Authorization: "token {{ pi_swarm_gitea_token }}"
+    status_code: [200, 404]
+    validate_certs: "{{ gitea_validate_certs | default(true) }}"
+  register: gitea_org_check
+  retries: 5
+  delay: 3
+  until: gitea_org_check.status in [200, 404]
+
+- name: Create Gitea organization for Pi Swarm
+  when: gitea_org_check.status == 404
+  ansible.builtin.uri:
+    url: "{{ (gitea_api_base_url | trim).rstrip('/') }}/api/v1/orgs"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ gitea_swarm_org | default('swarm') | trim }}"
+      full_name: "{{ gitea_swarm_org_full_name | default('Pi Swarm') }}"
+      description: "{{ gitea_swarm_org_description | default('Pi Swarm agent repositories') }}"
+    headers:
+      Authorization: "token {{ pi_swarm_gitea_token }}"
+    status_code: [201]
+    validate_certs: "{{ gitea_validate_certs | default(true) }}"
+  register: gitea_org_create
+
+- name: Report Gitea organization
+  ansible.builtin.debug:
+    msg: >-
+      {% if gitea_org_check.status == 200 %}
+      Gitea org '{{ gitea_swarm_org | default('swarm') }}' already exists.
+      {% else %}
+      Gitea org '{{ gitea_swarm_org | default('swarm') }}' was created.
+      {% endif %}

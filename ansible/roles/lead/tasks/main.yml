@@ -5,6 +5,9 @@
 - name: Gitea API token and /etc/pi-swarm/gitea.env
   ansible.builtin.import_tasks: gitea_token.yml
 
+- name: Gitea organization for Pi Swarm repos
+  ansible.builtin.import_tasks: gitea_org.yml
+
 - name: Metrics directory
   ansible.builtin.file:
     path: /var/lib/pi-swarm

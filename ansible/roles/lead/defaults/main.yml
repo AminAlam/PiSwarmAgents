@@ -2,6 +2,11 @@
 # Set true to delete Gitea bind-mount data and app.ini for a clean reinstall (also clears /etc/pi-swarm/gitea.env on lead).
 gitea_purge_data: false
 
+# Gitea organization created by lead role (must match Python GiteaConfig.organization, default "swarm").
+gitea_swarm_org: swarm
+gitea_swarm_org_full_name: Pi Swarm
+gitea_swarm_org_description: Pi Swarm agent repositories
+
 # Open TCP gitea_publish_http in UFW when UFW is active (so other PCs can reach Gitea on the LAN).
 gitea_open_firewall: true
 

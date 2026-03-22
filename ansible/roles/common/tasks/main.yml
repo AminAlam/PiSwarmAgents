@@ -1,4 +1,8 @@
 ---
+- name: Resolve Python app directory (monorepo vs flat repo)
+  ansible.builtin.set_fact:
+    pi_swarm_app_dir: "{{ ((swarm_clone_path | trim) ~ '/' ~ (pi_swarm_python_subdir | trim)) if (pi_swarm_python_subdir | default('') | trim | length) > 0 else (swarm_clone_path | trim) }}"
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true
@@ -21,16 +25,16 @@
     shell: /bin/bash
     create_home: true
 
-- name: Clone pi-swarm app
+- name: Clone swarm repo
   ansible.builtin.git:
     repo: "{{ swarm_repo }}"
-    dest: /opt/pi-swarm/app
+    dest: "{{ swarm_clone_path }}"
     version: main
   ignore_errors: true
 
 - name: Install Python requirements
   ansible.builtin.pip:
-    requirements: /opt/pi-swarm/app/requirements.txt
+    requirements: "{{ pi_swarm_app_dir }}/requirements.txt"
     executable: pip3
     extra_args: --break-system-packages
   ignore_errors: true

@@ -4,8 +4,8 @@ Single inventory file: **`config.yml`** (copy from `config.yml.example`). All ho
 
 ## What the playbook does
 
-1. **common** (all nodes): packages, `swarm` user, model download, app clone, pip deps, swap, CPU governor.
-2. **lead**: Docker + **Gitea 1.25.5** via Compose (`/opt/gitea`), wait for HTTP, create **Gitea API token** (BasicAuth), write `/etc/pi-swarm/gitea.env`, deploy **orchestrator** systemd unit.
+1. **common** (all nodes): packages, `swarm` user, git clone of `swarm_repo` to `swarm_clone_path`, pip install from `{{ swarm_clone_path }}/{{ pi_swarm_python_subdir }}/requirements.txt` (default subdir `pi-swarm` for a monorepo with `ansible/` + `pi-swarm/`), llama-cpp-python, swap, CPU governor.
+2. **lead**: Docker + **Gitea 1.25.5** via Compose (`/opt/gitea`), wait for HTTP, create **Gitea API token** (BasicAuth), write `/etc/pi-swarm/gitea.env`, ensure the **Gitea organization** `swarm` (override with `gitea_swarm_org`), deploy **orchestrator** systemd unit.
 3. **workers**: copy token env from lead hostvars, deploy **worker** systemd unit.
 
 Gitea image and ports match the Compose layout you specified (`docker.gitea.com/gitea:1.25.5`, `3000:3000`, `222:22`, bind-mount data under `gitea_data_host_path`).
@@ -15,7 +15,8 @@ Gitea image and ports match the Compose layout you specified (`docker.gitea.com/
 ```bash
 cd ansible
 cp config.yml.example config.yml
-# Edit config.yml: IPs, users, orchestrator_url, gitea_password, swarm_repo, etc.
+# Edit config.yml: IPs, users, orchestrator_url, gitea_password, swarm_repo,
+# swarm_clone_path, pi_swarm_python_subdir (see example), etc.
 ```
 
 `config.yml` is **gitignored** so passwords stay local.

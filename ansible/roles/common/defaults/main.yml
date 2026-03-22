@@ -1,0 +1,5 @@
+---
+# Git clone destination (repo root; may contain ansible/, pi-swarm/, etc.)
+swarm_clone_path: /opt/pi-swarm/app
+# Subdirectory under the clone that holds requirements.txt, src/, config/ (empty = app at repo root)
+pi_swarm_python_subdir: pi-swarm

@@ -12,6 +12,10 @@ all:
     # --- App / model (common role) — passed to llama-cli as: llama-cli -hf <hf_model> ---
     hf_model: "Qwen/Qwen3-4B-GGUF"
     swarm_repo: "https://github.com/AminAlam/PiSwarmAgents.git"
+    # Repo root on the node (git clone target). Python package is at .../<pi_swarm_python_subdir>/.
+    swarm_clone_path: /opt/pi-swarm/app
+    pi_swarm_python_subdir: pi-swarm
+    # For a single-package repo (no subdir), set: pi_swarm_python_subdir: ""
 
     # Workers call this URL (lead host LAN IP + orchestrator port).
     orchestrator_url: "http://192.168.0.171:8080"

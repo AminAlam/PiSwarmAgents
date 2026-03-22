@@ -4,11 +4,11 @@ After=network.target
 
 [Service]
 User=swarm
-WorkingDirectory=/opt/pi-swarm/app
+WorkingDirectory={{ pi_swarm_app_dir }}
 EnvironmentFile=/etc/pi-swarm/gitea.env
 Environment=GITEA_API_BASE_URL={{ gitea_api_base_url }}
 Environment=ORCHESTRATOR_URL={{ orchestrator_url }}
-Environment=SWARM_CONFIG_PATH=/opt/pi-swarm/app/config/swarm_config.yaml
+Environment=SWARM_CONFIG_PATH={{ pi_swarm_app_dir }}/config/swarm_config.yaml
 Environment=AGENT_ID={{ worker_agent_id | default(inventory_hostname) }}
 Environment=HF_MODEL={{ hf_model }}
 Environment=WORKER_ADVERTISE_HOST={{ ansible_host }}
