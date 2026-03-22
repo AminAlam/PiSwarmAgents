@@ -24,7 +24,7 @@ YAML defaults live in `config/swarm_config.yaml` (prompt paths, `webhook_base_ur
 
 ## Run
 
-From the app root (e.g. `/opt/pi-swarm/app`):
+From the app root (the directory that contains `src/` and `requirements.txt`). With the default Ansible monorepo layout this is **`/opt/pi-swarm/app/pi-swarm`** (clone root is `/opt/pi-swarm/app`).
 
 ```bash
 export PYTHONPATH=.

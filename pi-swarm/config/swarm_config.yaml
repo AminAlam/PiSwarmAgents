@@ -1,7 +1,7 @@
-# Defaults; paths relative to app working directory unless absolute.
+# Defaults. Prompt paths are relative to the config/ directory (beside this file).
 webhook_base_url: "http://127.0.0.1:8080"
 
 prompts:
-  lead_planner: "config/prompts/lead_planner.txt"
-  lead_reviewer: "config/prompts/lead_reviewer.txt"
-  dev_coder: "config/prompts/dev_coder.txt"
+  lead_planner: "prompts/lead_planner.txt"
+  lead_reviewer: "prompts/lead_reviewer.txt"
+  dev_coder: "prompts/dev_coder.txt"
