@@ -14,7 +14,7 @@ Rules:
 - Define shared_interfaces: types, function signatures, constants that all
   agents must agree on. Every developer receives these.
 - acceptance_criteria must be testable: "function X(input) returns Y".
-- branch_name format: "{task_id}/{agent_id}/{short_description}"
+- branch_name format: "{task_id}/{{agent_id}}/{{short_description}}"
 
 Respond with ONLY valid JSON. No markdown, no explanation. Schema:
 {schema_json}

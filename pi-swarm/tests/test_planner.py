@@ -2,8 +2,27 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from src.models import AgentNode, AgentRole, DevAssignment, Task, TaskPlan
 from src.orchestrator.planner import fallback_single_agent_plan, validate_plan
+
+
+def test_lead_planner_prompt_formats_without_extra_keys() -> None:
+    """Braces in instructions must be escaped ({{ }}) so str.format does not KeyError."""
+    tpl = (Path(__file__).resolve().parent.parent / "config/prompts/lead_planner.txt").read_text(
+        encoding="utf-8",
+    )
+    out = tpl.format(
+        agent_list_json="[]",
+        file_list="(none)",
+        task_id="tid001",
+        repo_name="myrepo",
+        schema_json=json.dumps({"x": 1}),
+    )
+    assert "tid001" in out
+    assert "{agent_id}" in out or "agent_id" in out
 
 
 def test_validate_plan_ok() -> None:
