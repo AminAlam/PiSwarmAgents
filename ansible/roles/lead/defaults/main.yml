@@ -18,3 +18,6 @@ gitea_admin_email: "swarm-admin@local"
 
 # Optional; if unset, ROOT_URL is derived from gitea_api_base_url in gitea-app.ini.j2
 # gitea_root_url: "http://127.0.0.1:3000"
+
+# Orchestrator Docker Compose directory
+pi_swarm_orchestrator_compose_dir: /opt/pi-swarm/orchestrator

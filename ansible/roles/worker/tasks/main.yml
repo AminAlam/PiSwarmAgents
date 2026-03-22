@@ -14,16 +14,39 @@
     owner: root
     group: root
 
-- name: Worker systemd unit
-  ansible.builtin.template:
-    src: pi-swarm-worker.service.j2
-    dest: /etc/systemd/system/pi-swarm-worker.service
-    mode: "0644"
-  notify: Reload systemd
+# --- Stop old systemd service if present ---
 
-- name: Enable and start worker
+- name: Stop old worker systemd service
   ansible.builtin.systemd:
     name: pi-swarm-worker
-    enabled: true
-    state: started
-    daemon_reload: true
+    state: stopped
+    enabled: false
+  failed_when: false
+
+# --- Worker Docker container ---
+
+- name: Create worker compose directory
+  ansible.builtin.file:
+    path: "{{ pi_swarm_worker_compose_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Deploy worker docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.worker.yml.j2
+    dest: "{{ pi_swarm_worker_compose_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Restart worker container (picks up new image and config)
+  ansible.builtin.command: docker compose up -d --force-recreate
+  args:
+    chdir: "{{ pi_swarm_worker_compose_dir }}"
+  register: worker_compose_up
+  changed_when: worker_compose_up.rc == 0
+
+- name: Wait for worker to listen on HTTP
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: 8000
+    delay: 3
+    timeout: 60

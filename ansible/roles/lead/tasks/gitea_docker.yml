@@ -1,77 +1,5 @@
 ---
-# Docker Engine — Debian bookworm apt repo (works on Pi OS when raspbian suite has no packages).
-
-# Per Docker docs — only distro packages conflict with docker-ce from Docker's repo.
-- name: Remove conflicting distro Docker packages
-  ansible.builtin.apt:
-    name:
-      - docker.io
-      - docker-doc
-      - docker-compose
-      - podman-docker
-      - docker-buildx
-    state: absent
-
-# --- Docker Inc. install sequence (verbatim) ---
-
-- name: apt-get update
-  ansible.builtin.apt:
-    update_cache: true
-
-- name: apt-get install ca-certificates curl
-  ansible.builtin.apt:
-    name:
-      - ca-certificates
-      - curl
-    state: present
-
-- name: install -m 0755 -d /etc/apt/keyrings
-  ansible.builtin.command: install -m 0755 -d /etc/apt/keyrings
-  changed_when: false
-
-- name: curl Docker GPG key to /etc/apt/keyrings/docker.asc
-  ansible.builtin.command:
-    argv:
-      - curl
-      - -fsSL
-      - https://download.docker.com/linux/debian/gpg
-      - -o
-      - /etc/apt/keyrings/docker.asc
-
-- name: chmod a+r /etc/apt/keyrings/docker.asc
-  ansible.builtin.command: chmod a+r /etc/apt/keyrings/docker.asc
-  changed_when: false
-
-- name: Remove existing /etc/apt/sources.list.d/docker.list
-  ansible.builtin.file:
-    path: /etc/apt/sources.list.d/docker.list
-    state: absent
-
-- name: Add Docker Debian bookworm apt repository
-  ansible.builtin.shell: |
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-  args:
-    executable: /bin/bash
-
-- name: apt-get update (after docker.list)
-  ansible.builtin.apt:
-    update_cache: true
-
-- name: apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  ansible.builtin.apt:
-    name:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      - docker-buildx-plugin
-      - docker-compose-plugin
-    state: present
-
-- name: Enable and start Docker
-  ansible.builtin.systemd:
-    name: docker
-    enabled: true
-    state: started
+# Gitea container setup (Docker Engine is installed by the common role).
 
 - name: Allow Gitea HTTP port through UFW (LAN access from other PCs)
   ansible.builtin.shell: |
@@ -224,7 +152,7 @@
   when: gitea_user not in (gitea_user_list_precheck.stdout | default(''))
   changed_when: gitea_admin_create.rc == 0
 
-# Loopback only (never gitea_api_base_url/LAN IP — hairpin often fails). Uses curl; Python uri can still use wrong URL or mangle IPv4.
+# Loopback only (never gitea_api_base_url/LAN IP — hairpin often fails).
 - name: Wait until Gitea serves HTTP on localhost
   ansible.builtin.shell: >-
     curl -sfS --connect-timeout 5 --max-time 15

@@ -1,0 +1,7 @@
+# Managed by Ansible — webhook_base_url must be the lead's LAN IP
+# so Gitea (in its own container) can reach the orchestrator.
+webhook_base_url: "http://{{ ansible_host }}:8080"
+prompts:
+  lead_planner: "prompts/lead_planner.txt"
+  lead_reviewer: "prompts/lead_reviewer.txt"
+  dev_coder: "prompts/dev_coder.txt"

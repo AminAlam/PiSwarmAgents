@@ -1,0 +1,3 @@
+---
+# Worker Docker Compose directory
+pi_swarm_worker_compose_dir: /opt/pi-swarm/worker

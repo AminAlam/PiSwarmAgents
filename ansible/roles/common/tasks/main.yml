@@ -11,12 +11,72 @@
 - name: Install system packages
   ansible.builtin.apt:
     name:
-      - python3-pip
-      - python3-venv
       - git
-      - build-essential
-      - cmake
+      - ca-certificates
+      - curl
     state: present
+
+# --- Docker Engine (from Docker's official Debian repo) ---
+
+- name: Remove conflicting distro Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-doc
+      - docker-compose
+      - podman-docker
+      - docker-buildx
+    state: absent
+
+- name: Create /etc/apt/keyrings
+  ansible.builtin.command: install -m 0755 -d /etc/apt/keyrings
+  changed_when: false
+
+- name: Download Docker GPG key
+  ansible.builtin.command:
+    argv:
+      - curl
+      - -fsSL
+      - https://download.docker.com/linux/debian/gpg
+      - -o
+      - /etc/apt/keyrings/docker.asc
+
+- name: Make Docker GPG key readable
+  ansible.builtin.command: chmod a+r /etc/apt/keyrings/docker.asc
+  changed_when: false
+
+- name: Remove stale docker.list
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/docker.list
+    state: absent
+
+- name: Add Docker Debian bookworm apt repository
+  ansible.builtin.shell: |
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  args:
+    executable: /bin/bash
+
+- name: Update apt cache (after docker.list)
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install Docker Engine
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Enable and start Docker
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+# --- Clone / update repo and build Docker image ---
 
 - name: Create swarm user
   ansible.builtin.user:
@@ -25,26 +85,22 @@
     shell: /bin/bash
     create_home: true
 
-- name: Clone swarm repo
+- name: Clone / update swarm repo
   ansible.builtin.git:
     repo: "{{ swarm_repo }}"
     dest: "{{ swarm_clone_path }}"
     version: main
-  ignore_errors: true
+    force: true
+  register: swarm_repo_clone
 
-- name: Install Python requirements
-  ansible.builtin.pip:
-    requirements: "{{ pi_swarm_app_dir }}/requirements.txt"
-    executable: pip3
-    extra_args: --break-system-packages
-  ignore_errors: true
+- name: Build pi-swarm Docker image
+  ansible.builtin.command:
+    cmd: docker build -t pi-swarm:latest .
+    chdir: "{{ pi_swarm_app_dir }}"
+  register: swarm_image_build
+  changed_when: swarm_image_build.rc == 0
 
-- name: Install llama-cpp-python
-  ansible.builtin.pip:
-    name: llama-cpp-python
-    executable: pip3
-    extra_args: --break-system-packages
-  ignore_errors: true
+# --- Pi-specific tuning ---
 
 - name: Configure swap 2GB (dphys-swapfile)
   ansible.builtin.shell: |

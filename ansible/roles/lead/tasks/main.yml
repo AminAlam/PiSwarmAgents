@@ -8,23 +8,45 @@
 - name: Gitea organization for Pi Swarm repos
   ansible.builtin.import_tasks: gitea_org.yml
 
-- name: Metrics directory
-  ansible.builtin.file:
-    path: /var/lib/pi-swarm
-    state: directory
-    owner: swarm
-    mode: "0755"
+# --- Stop old systemd service if present ---
 
-- name: Orchestrator systemd unit
-  ansible.builtin.template:
-    src: pi-swarm-orchestrator.service.j2
-    dest: /etc/systemd/system/pi-swarm-orchestrator.service
-    mode: "0644"
-  notify: Reload systemd
-
-- name: Enable and start orchestrator
+- name: Stop old orchestrator systemd service
   ansible.builtin.systemd:
     name: pi-swarm-orchestrator
-    enabled: true
-    state: started
-    daemon_reload: true
+    state: stopped
+    enabled: false
+  failed_when: false
+
+# --- Orchestrator Docker container ---
+
+- name: Create orchestrator compose directory
+  ansible.builtin.file:
+    path: "{{ pi_swarm_orchestrator_compose_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Deploy orchestrator swarm_config.yaml (webhook URL = lead LAN IP)
+  ansible.builtin.template:
+    src: swarm_config.yaml.j2
+    dest: "{{ pi_swarm_orchestrator_compose_dir }}/swarm_config.yaml"
+    mode: "0644"
+
+- name: Deploy orchestrator docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.orchestrator.yml.j2
+    dest: "{{ pi_swarm_orchestrator_compose_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Restart orchestrator container (picks up new image and config)
+  ansible.builtin.command: docker compose up -d --force-recreate
+  args:
+    chdir: "{{ pi_swarm_orchestrator_compose_dir }}"
+  register: orch_compose_up
+  changed_when: orch_compose_up.rc == 0
+
+- name: Wait for orchestrator to listen on HTTP
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: 8080
+    delay: 3
+    timeout: 60

@@ -1,0 +1,27 @@
+# Managed by Ansible — Pi Swarm Orchestrator
+services:
+  orchestrator:
+    image: pi-swarm:latest
+    container_name: pi-swarm-orchestrator
+    restart: always
+    ports:
+      - "0.0.0.0:8080:8080"
+    env_file:
+      - /etc/pi-swarm/gitea.env
+    environment:
+      - GITEA_API_BASE_URL={{ gitea_api_base_url }}
+      - SWARM_METRICS_DB=/data/metrics.db
+      - SWARM_CONFIG_PATH=/app/config/swarm_config.yaml
+      - SWARM_PLANNING_TIMEOUT_SECONDS={{ swarm_planning_timeout_seconds | default(1800) }}
+    volumes:
+      - orchestrator-data:/data
+      - hf-cache:/root/.cache/huggingface
+      - {{ pi_swarm_orchestrator_compose_dir }}/swarm_config.yaml:/app/config/swarm_config.yaml:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  orchestrator-data:
+  hf-cache:
