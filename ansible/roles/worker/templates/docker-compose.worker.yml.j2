@@ -17,10 +17,7 @@ services:
       - WORKER_ADVERTISE_HOST={{ ansible_host }}
     volumes:
       - hf-cache:/root/.cache/huggingface
-    deploy:
-      resources:
-        limits:
-          memory: 512M
+    mem_limit: {{ swarm_container_memory_limit | default('3584m') }}
     command:
       - python3
       - -m
