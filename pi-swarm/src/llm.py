@@ -52,6 +52,36 @@ def resolve_model_path(hf_model: str) -> str:
         logger.warning("[resolve_model_path] Directory %s has no .gguf files", hf_model)
         return hf_model
 
+    # Check HF cache first — avoids re-downloading if model is already there
+    try:
+        from huggingface_hub import try_to_load_from_cache
+
+        cached = try_to_load_from_cache(repo_id=hf_model, filename=None)
+        # try_to_load_from_cache returns None or _CACHED_NO_EXIST when not found
+        if cached and isinstance(cached, str) and os.path.isfile(cached):
+            size_mb = os.path.getsize(cached) / (1024 * 1024)
+            logger.info("[resolve_model_path] Found in HF cache: %s (%.0f MB)", cached, size_mb)
+            return cached
+    except Exception:
+        pass
+
+    # Check cache dir manually for any previously downloaded GGUF
+    try:
+        from huggingface_hub import scan_cache_dir
+
+        cache_info = scan_cache_dir()
+        for repo_info in cache_info.repos:
+            if repo_info.repo_id == hf_model:
+                for revision in repo_info.revisions:
+                    for f in revision.files:
+                        if str(f.file_path).endswith(".gguf") and "Q4_K_M" in str(f.file_path):
+                            path = str(f.file_path)
+                            size_mb = os.path.getsize(path) / (1024 * 1024)
+                            logger.info("[resolve_model_path] Found cached GGUF: %s (%.0f MB)", path, size_mb)
+                            return path
+    except Exception as exc:
+        logger.debug("[resolve_model_path] Cache scan failed: %s", exc)
+
     try:
         from huggingface_hub import HfApi, hf_hub_download
 
@@ -65,16 +95,29 @@ def resolve_model_path(hf_model: str) -> str:
         if not pick:
             logger.warning("[resolve_model_path] No GGUF in repo %s; using raw HF id", hf_model)
             return hf_model
-        logger.info("[resolve_model_path] Downloading %s/%s (this may take a long time on Pi)...", hf_model, pick)
-        t0 = time.perf_counter()
-        local_path = str(hf_hub_download(repo_id=hf_model, filename=pick))
-        dur = time.perf_counter() - t0
-        size_mb = os.path.getsize(local_path) / (1024 * 1024)
-        logger.info(
-            "[resolve_model_path] Download complete: %s (%.0f MB) in %.1f s",
-            local_path, size_mb, dur,
-        )
-        return local_path
+
+        # Disable xet storage backend — it stalls on Pi / ARM64
+        old_xet = os.environ.get("HF_HUB_DISABLE_XET")
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
+        try:
+            logger.info("[resolve_model_path] Downloading %s/%s (xet disabled, using HTTP)...", hf_model, pick)
+            t0 = time.perf_counter()
+            local_path = str(hf_hub_download(
+                repo_id=hf_model,
+                filename=pick,
+            ))
+            dur = time.perf_counter() - t0
+            size_mb = os.path.getsize(local_path) / (1024 * 1024)
+            logger.info(
+                "[resolve_model_path] Download complete: %s (%.0f MB) in %.1f s",
+                local_path, size_mb, dur,
+            )
+            return local_path
+        finally:
+            if old_xet is None:
+                os.environ.pop("HF_HUB_DISABLE_XET", None)
+            else:
+                os.environ["HF_HUB_DISABLE_XET"] = old_xet
     except Exception as exc:
         logger.exception("[resolve_model_path] HF resolve failed for %s: %s", hf_model, exc)
         return hf_model

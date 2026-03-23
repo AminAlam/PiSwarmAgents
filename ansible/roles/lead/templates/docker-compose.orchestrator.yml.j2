@@ -13,6 +13,7 @@ services:
       - SWARM_METRICS_DB=/data/metrics.db
       - SWARM_CONFIG_PATH=/app/config/swarm_config.yaml
       - SWARM_PLANNING_TIMEOUT_SECONDS={{ swarm_planning_timeout_seconds | default(1800) }}
+      - HF_HUB_DISABLE_XET=1
     volumes:
       - orchestrator-data:/data
       - hf-cache:/root/.cache/huggingface

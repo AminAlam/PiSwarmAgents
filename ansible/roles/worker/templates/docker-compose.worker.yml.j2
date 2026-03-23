@@ -15,6 +15,7 @@ services:
       - AGENT_ID={{ worker_agent_id | default(inventory_hostname) }}
       - HF_MODEL={{ hf_model }}
       - WORKER_ADVERTISE_HOST={{ ansible_host }}
+      - HF_HUB_DISABLE_XET=1
     volumes:
       - hf-cache:/root/.cache/huggingface
     mem_limit: {{ swarm_container_memory_limit | default('3584m') }}
